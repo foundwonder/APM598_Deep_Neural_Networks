@@ -38,8 +38,8 @@ class TwoLayerLinearClassificationNN:
         self._model = nn.Sequential(nn.Linear(2, 2),
                                     nn.ReLU(),
                                     nn.Linear(2, self._num_classes))
-        # self._loss_function = nn.MSELoss(reduction='mean')
-        self._loss_function = nn.CrossEntropyLoss()
+        self._loss_function = nn.MSELoss(reduction='mean')
+        # self._loss_function = nn.CrossEntropyLoss()
         self._learning_rate = learning_rate
         self._momentum = momentum
 
@@ -50,6 +50,10 @@ class TwoLayerLinearClassificationNN:
     def forward(self):
         y_hat = self._model(self._tensor_x.float().view(self._N, self._nX))
         return y_hat
+
+    def print_parameters(self):
+        for param in self._model.named_parameters():
+            print(param)
 
     @staticmethod
     def find_y_class(y):
