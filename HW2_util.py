@@ -38,7 +38,8 @@ class TwoLayerLinearClassificationNN:
         self._model = nn.Sequential(nn.Linear(2, 2),
                                     nn.ReLU(),
                                     nn.Linear(2, self._num_classes))
-        self._loss_function = nn.MSELoss(reduction='mean')
+        # self._loss_function = nn.MSELoss(reduction='mean')
+        self._loss_function = nn.CrossEntropyLoss()
         self._learning_rate = learning_rate
         self._momentum = momentum
 
