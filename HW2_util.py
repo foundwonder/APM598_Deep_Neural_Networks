@@ -8,7 +8,7 @@ class TwoLayerLinearClassificationNN:
     r"""
     This class is a two layer nn with Relu
     """
-    def __init__(self, data_x, data_y):
+    def __init__(self, data_x, data_y, learning_rate=0.05, momentum=0.9):
         r"""
         :param data_x:
         :param data_y: a list / array of class number starting from 1, e.g. 2 instead of a array or tensor, e.g. [0,1]
@@ -39,6 +39,8 @@ class TwoLayerLinearClassificationNN:
                                     nn.ReLU(),
                                     nn.Linear(2, self._num_classes))
         self._loss_function = nn.MSELoss(reduction='mean')
+        self._learning_rate = learning_rate
+        self._momentum = momentum
 
     @property
     def model(self) -> nn.Module:
@@ -54,8 +56,8 @@ class TwoLayerLinearClassificationNN:
         scores_array = np.asarray(y.tolist())
         return np.argmax(scores_array) + 1
 
-    def train_model(self, num_epoch, learning_rate=0.05):
-        optimizer = torch.optim.SGD(self._model.parameters(), lr=learning_rate)
+    def train_model(self, num_epoch):
+        optimizer = torch.optim.SGD(self._model.parameters(), lr=self._learning_rate, momentum=self._momentum)
         accuracy_list = []
         losses = []
         for epoch in range(num_epoch):
@@ -71,14 +73,14 @@ class TwoLayerLinearClassificationNN:
             losses.append(loss)
         return loss, accuracy_list, losses
 
-    def train_model_and_print(self, num_epoch, learning_rate=0.05):
+    def train_model_and_print(self, num_epoch):
         r"""
         this method is just for train and print the final loss, not much use.
         :param num_epoch:
         :param learning_rate:
         :return:
         """
-        loss, _, _ = self.train_model(num_epoch, learning_rate)
+        loss, _, _ = self.train_model(num_epoch)
         for param in self._model.named_parameters():
             print(param)
         print(f'The loss is {loss}')
@@ -104,7 +106,7 @@ class TwoLayerLinearClassificationNN:
         percentage = true_counter/self._N
         return percentage
 
-    def find_good_parameters(self, num_epoch: int, learning_rate=0.05, threshold=0.9, num_of_good_models=4):
+    def find_good_parameters(self, num_epoch: int, threshold=0.9, num_of_good_models=4):
         r"""
         I have a difficult time finding the w and b that make #1a predict 100%, so I wrote this method.
         Not sure if this is correct.
@@ -115,7 +117,7 @@ class TwoLayerLinearClassificationNN:
         :param num_of_good_models:
         :return: It does not return anything, only prints out the parameters of the good models during training.
         """
-        optimizer = torch.optim.SGD(self._model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.SGD(self._model.parameters(), lr=self._learning_rate, momentum=self._momentum)
         counter = 0
         for epoch in range(num_epoch):
             running_loss = 0.0
@@ -144,7 +146,7 @@ class TwoLayerLinearClassificationNN:
         :param learning_rate: by defaut is 0.05
         :return: does not return anything, only plot two graphs for loss and accuracy.
         """
-        _, accuracies, losses = self.train_model(num_epoch, learning_rate)
+        _, accuracies, losses = self.train_model(num_epoch)
         plot_x = range(num_epoch)
         plt.grid(True)
         plt.plot(plot_x, accuracies, '-', c='r')
