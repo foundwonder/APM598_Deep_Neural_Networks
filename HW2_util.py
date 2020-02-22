@@ -143,8 +143,6 @@ class CNNNet(nn.Module):
         return s
 
 
-# trainer = TrainCNNNet(training_s, test_s, model=CNNNet())
-# trainer.
 class MyCNNNetTrainer:
     def __init__(self, training_set, test_set, num_epoch=5, middle_channel=4,
                  learning_rate=0.0001, batchsize=20, drop_out=0.2):
