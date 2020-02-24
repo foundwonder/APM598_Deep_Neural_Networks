@@ -4,7 +4,7 @@ for APM598: Intro to Deep Neural Networks at ASU, Spring 2020.
 this is a util file containing:
 1) a dataclass that holds hyper-parameters for neural networks and trainers;
 2) several customized neural networks;
-3) a trainer class that takes a data class and a neural network and train it;
+3) a trainer class that takes a data class and a neural network and train it with dropout and minibatches;
 4) some functions for plot and print the training result.
 """
 
@@ -40,6 +40,10 @@ class ModuleParams:
 
 
 class TwoLayerReluModel(nn.Module):
+    r"""
+    This class is a two-layer linear neural network with a ReLu activation function on the first layer.
+    Basically, f(x) = b2 + w2 * σ(b1 + w1 * x)
+    """
     def __init__(self, model_params: ModuleParams):
         self._in_feature = model_params.linear_in_features
         self._hidden_neurons = model_params.linear_hidden_features
@@ -55,6 +59,14 @@ class TwoLayerReluModel(nn.Module):
 
 
 class CNNNet(nn.Module):
+    r"""
+    This class is a CNN that orderly consists of one Conv net, one ReLu activation function,
+    one max pool, a second Conv net, a second ReLu, and a linear classifier.
+    Drop out rate by default is set as 0.2.
+    The dataset fitting in this CNN is MNIST, specifically, Fashion-MNIST (dimension 28*28),
+    that's why the flattern layer dimension is 9*9 (Conv: 28-(3-1)=26, maxpool: 26/2=13, Conv:13-(5-1)=9).
+    If image size changes, can add dimensions to ModelParams, and pass it here.
+    """
     def __init__(self, model_params: ModuleParams):
         super(CNNNet, self).__init__()
         self._middle_channel = model_params.middle_channel
@@ -78,6 +90,9 @@ class CNNNet(nn.Module):
 
 
 class MyNNTrainer:
+    r"""
+    a generic NN trainer
+    """
     def __init__(self, model: nn.Module, model_params: ModuleParams,
                  training_set, test_set=None):
         self._training_set, self._test_set = training_set, test_set
