@@ -1,4 +1,13 @@
-import numpy as np
+"""
+author: Jieshu Wang (jwang490@asu.edu, foundwonder@gmail.com)
+for APM598: Intro to Deep Neural Networks at ASU, Spring 2020.
+this is a util file containing:
+1) a dataclass that holds hyper-parameters for neural networks and trainers;
+2) several customized neural networks;
+3) a trainer class that takes a data class and a neural network and train it;
+4) some functions for plot and print the training result.
+"""
+
 import pandas as pd
 from math import floor
 import torch
@@ -6,134 +15,59 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
 import time
+from dataclasses import dataclass
 
-class TwoLayerReluModule(nn.Module):
-    def __init__(self, in_feature: int, hidden_neuron: int, out_feature: int):
-        super(TwoLayerReluModule, self).__init__()
-        self._model = nn.Sequential(nn.Linear(in_feature, hidden_neuron),
+
+@dataclass
+class ModuleParams:
+    r"""
+    This dataclass holds the hyper-parameters needed for the modules.
+    """
+    num_classes: int = 10
+    middle_channel: int = 4
+    drop_out_rate: float = 0.2
+    num_epoch: int = 5
+    batch_size: int = 20
+    learning_rate: float = 0.0001
+    momentum: float = 0.9
+    print_number: int = 5
+    optimizer: str = 'Adam'
+    linear_in_features: int = 2
+    linear_hidden_features: int = 2
+    linear_out_features: int = 2
+    num_good_parameters: int = 5
+    good_parameter_threshold: float = 0.95
+
+
+class TwoLayerReluModel(nn.Module):
+    def __init__(self, model_params: ModuleParams):
+        self._in_feature = model_params.linear_in_features
+        self._hidden_neurons = model_params.linear_hidden_features
+        self._out_feature = model_params.linear_out_features
+        super(TwoLayerReluModel, self).__init__()
+        self._model = nn.Sequential(nn.Linear(self._in_feature, self._hidden_neurons),
                                     nn.ReLU(),
-                                    nn.Linear(hidden_neuron, out_feature))
+                                    nn.Linear(self._hidden_neurons, self._out_feature))
 
     def forward(self, x):
         z = self._model(x)
         return z
 
 
-class TwoLayerLinearClassificationNN:
-    r"""
-    This class is a two layer nn with Relu
-    """
-    def __init__(self, data_x, data_y, hidden_neurons=2,
-                 learning_rate=0.05, momentum=0.9,
-                 batchsize=5, optim='SDG'):
-        self._data_x, self._data_y = data_x, data_y
-        self._tensor_x = torch.as_tensor(self._data_x, dtype=float)
-        self._tensor_y = torch.as_tensor(self._data_y, dtype=torch.long)
-        self._num_classes = torch.unique(self._tensor_y).size()[0]  # how many classes
-        self._N, self._nX = self._tensor_x.size()  # _N is the number of training data, _nX is the number of x params.
-        self._input_features = self._nX
-        self._model = TwoLayerReluModule(self._input_features, hidden_neurons, self._num_classes)
-        self._loss_function = nn.CrossEntropyLoss()
-        # self._loss_function = nn.MSELoss()
-        self._learning_rate, self._momentum, self._batchsize, self._optim = learning_rate, momentum, batchsize, optim
-        self._training_dataset = TensorDataset(self._tensor_x, self._tensor_y)
-        self._loader_train = DataLoader(self._training_dataset, batch_size=self._batchsize, shuffle=True)
-        self._nbr_minibatch_train = len(self._loader_train)
-        self._df = pd.DataFrame(columns=('epoch', 'loss_train', 'accuracy_train', 'parameters'))
-
-    @property
-    def model(self) -> nn.Module:
-        return self._model
-
-    def print_parameters(self):
-        for param in self._model.named_parameters():
-            print(param)
-
-    @staticmethod
-    def find_y_class(y):
-        # y is a list/tensor
-        scores_array = np.asarray(y.tolist())
-        return np.argmax(scores_array) + 1
-
-    def train_model(self, num_epoch):
-        optimizer = torch.optim.SGD(self._model.parameters(), lr=self._learning_rate, momentum=self._momentum)
-        if self._optim == 'Adam':
-            optimizer = torch.optim.Adam(self._model.parameters(), lr=self._learning_rate)
-
-        for epoch in range(num_epoch):
-
-            step_to_print = floor(num_epoch/10)
-            running_loss_train, accuracy_train = 0.0, 0.0
-            self._model.train()
-            for X, y_train in self._loader_train:
-                optimizer.zero_grad()
-                y = y_train - 1
-                # one-hot coding, no need
-                # y_train = y_train - 1
-                # y = torch.zeros(self._batchsize, self._num_classes)
-                # y[range(y.shape[0]), y_train] = 1
-                score = self._model(X.float())
-                loss = self._loss_function(score, y)
-                loss.backward()
-                optimizer.step()
-                running_loss_train += loss.detach().numpy()
-                accuracy_train += (score.argmax(dim=1) == y).sum().numpy()
-            self._model.eval()
-            parameters = [param for name, param in self._model.named_parameters()]
-            loss_train = running_loss_train/self._nbr_minibatch_train
-            accuracy_train /= self._N
-            if epoch%step_to_print == 0:
-                print(f'-- epoch {epoch}')
-                print(f'loss is {loss_train}, accuracy is {accuracy_train}')
-            self._df.loc[epoch] = [epoch, loss_train, accuracy_train, parameters]
-        print(f'{num_epoch} trainings is finished!')
-        print(f'Final loss is {loss_train}, accuracy is {accuracy_train}')
-
-    def find_accurate_params_after_training(self, threshold=0.9, nbr_of_good_params=4):
-        accurate_df = self._df.loc[self._df.accuracy_train >= threshold]
-        if len(accurate_df) == 0:
-            print(f'There is no models accuracy larger than {threshold}')
-        else:
-            print(f'\n The parameters that perform with (at least) {threshold*100}% accuracy are:')
-            number_to_print = min(len(accurate_df), nbr_of_good_params)
-            for i in range(number_to_print):
-                df = accurate_df.iloc[i]
-                epoch, loss, accuracy, parameters = df['epoch'], df['loss_train'], df['accuracy_train'], df['parameters']
-                print(f'\n{epoch} trainings, accuracy is {accuracy}, loss is {loss}')
-                for name, params in parameters:
-                    print(params)
-
-    def plot_loss_accuracy(self):
-        df = self._df
-        plt.figure(1)
-        plt.grid(True)
-        plt.clf()
-        # plt.plot(df['epoch'], df['accuracy_train'], marker='o', color='red')
-        plt.plot(df['epoch'], df['accuracy_train'], color='red')
-        # plt.plot(df['epoch'], df['accuracy_test'], marker='o', color='orange', linestyle='dashed')
-        # plt.plot(df['epoch'], df['loss_train'], marker='o', color='blue')
-        plt.plot(df['epoch'], df['loss_train'], color='blue')
-        # plt.plot(df['epoch'], df['loss_test'], marker='o', color='teal', linestyle='dashed')
-
-        plt.xlabel(r'epoch')
-        plt.ylabel(r'loss/accuracy')
-        plt.legend(['accuracy_train', 'loss_train'])
-        plt.show()
-
-
 class CNNNet(nn.Module):
-    def __init__(self, num_classes=10, middle_channel=4, drop_out_rate=0.2):
+    def __init__(self, model_params: ModuleParams):
         super(CNNNet, self).__init__()
+        self._middle_channel = model_params.middle_channel
         self._features = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=middle_channel, kernel_size=3),
+            nn.Conv2d(in_channels=1, out_channels=self._middle_channel, kernel_size=3),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
-            nn.Conv2d(in_channels=middle_channel, out_channels=middle_channel*2, kernel_size=5),
+            nn.Conv2d(in_channels=self._middle_channel, out_channels=self._middle_channel * 2, kernel_size=5),
             nn.ReLU()
         )
         self._classifier = nn.Sequential(
-            nn.Dropout(p=drop_out_rate),
-            nn.Linear(middle_channel*2*9*9, num_classes)
+            nn.Dropout(p=model_params.drop_out_rate),
+            nn.Linear(self._middle_channel * 2 * 9 * 9, model_params.num_classes)
         )
 
     def forward(self, x):
@@ -143,25 +77,37 @@ class CNNNet(nn.Module):
         return s
 
 
-class MyCNNNetTrainer:
-    def __init__(self, training_set, test_set, num_epoch=5, middle_channel=4,
-                 learning_rate=0.0001, batchsize=20, drop_out=0.2):
+class MyNNTrainer:
+    def __init__(self, model: nn.Module, model_params: ModuleParams,
+                 training_set, test_set=None):
         self._training_set, self._test_set = training_set, test_set
-        self._model = CNNNet(drop_out_rate=drop_out, middle_channel=middle_channel)
+        self._model = model(model_params=model_params)
         self._loss_function = nn.CrossEntropyLoss()
-        self._learning_rate, self._batchsize, self._num_epoch = learning_rate, batchsize, num_epoch
+        self._learning_rate, self._num_epoch = model_params.learning_rate, model_params.num_epoch
+        self._batchsize, self._optimizer = model_params.batch_size, model_params.optimizer
+        self._momentum, self._print_num = model_params.momentum, model_params.print_number
+        self._num_good_parameters, self._threshold = model_params.num_good_parameters, model_params.good_parameter_threshold
         self._loader_train = DataLoader(self._training_set, batch_size=self._batchsize, shuffle=True)
-        self._loader_test = DataLoader(self._test_set, batch_size=self._batchsize, shuffle=False)
-        self._N_training_data, self._N_test_data = len(self._training_set), len(self._test_set)
-        self._nbr_minibatch_train, self._nbr_minibatch_test = len(self._loader_train), len(self._loader_test)
-        self._df = pd.DataFrame(columns=('epoch', 'loss_train', 'loss_test', 'accuracy_train', 'accuracy_test'))
-        self.train(num_epoch=self._num_epoch)
+        self._N_training_data = len(self._training_set)
+        self._nbr_minibatch_train = len(self._loader_train)
+        self._df = pd.DataFrame(columns=('epoch', 'loss_train', 'accuracy_train', 'parameters'))
+        if self._test_set is not None:
+            self._loader_test = DataLoader(self._test_set, batch_size=self._batchsize, shuffle=False)
+            self._N_test_data = len(self._test_set)
+            self._nbr_minibatch_test = len(self._loader_test)
+            self._df = pd.DataFrame(columns=('epoch', 'loss_train', 'loss_test', 'accuracy_train', 'accuracy_test','parameters'))
+        self.train()
 
-    def train(self, num_epoch=5, print_num=5):
-        optimizer = torch.optim.Adam(self._model.parameters(), lr=self._learning_rate)
+    def train(self):
+        if self._optimizer == 'Adam':
+            optimizer = torch.optim.Adam(self._model.parameters(), lr=self._learning_rate)
+        if self._optimizer == 'SDG':
+            optimizer = torch.optim.SGD(self._model.parameters(), lr=self._learning_rate, momentum=self._momentum)
         t0 = time.time()
-        for epoch in range(num_epoch):
-            step_to_print = floor(num_epoch / print_num)
+        good_parameters_counter = 0
+        for epoch in range(self._num_epoch):
+            parameters = 0
+            step_to_print = floor(self._num_epoch / self._print_num)
             # train
             running_loss_train, accuracy_train = 0.0, 0.0
             self._model.train()
@@ -169,8 +115,8 @@ class MyCNNNetTrainer:
                 # 1) initialize the gradient "loss" to zero
                 optimizer.zero_grad()
                 # 2) compute the score and loss
-                # score = self._model(X.float())
-                score = self._model(X)
+                score = self._model(X.float())
+                # score = self._model(X)
                 loss = self._loss_function(score, y)
                 # 3) estimate the gradient and update parameters
                 loss.backward()
@@ -179,48 +125,89 @@ class MyCNNNetTrainer:
                 running_loss_train += loss.detach().numpy()
                 accuracy_train += (score.argmax(dim=1) == y).sum().numpy()
             # test
-            running_loss_test, accuracy_test = 0.0, 0.0
-            self._model.eval()
-            with torch.no_grad():
-                for X, y in self._loader_test:
-                    # 1) computer the score and loss
-                    score = self._model(X)
-                    loss = self._loss_function(score, y)
-                    # 2) estimate the overall loss over the all test set
-                    running_loss_test += loss.detach().numpy()
-                    accuracy_test += (score.argmax(dim=1) == y).sum().numpy()
+            if self._test_set is not None:
+                running_loss_test, accuracy_test = 0.0, 0.0
+                self._model.eval()
+                with torch.no_grad():
+                    for X, y in self._loader_test:
+                        # 1) computer the score and loss
+                        # score = self._model(X)
+                        score = self._model(X.float())
+                        loss = self._loss_function(score, y)
+                        # 2) estimate the overall loss over the all test set
+                        running_loss_test += loss.detach().numpy()
+                        accuracy_test += (score.argmax(dim=1) == y).sum().numpy()
             # end epoch and statistics
             loss_train = running_loss_train / self._nbr_minibatch_train
-            loss_test = running_loss_test / self._nbr_minibatch_test
             accuracy_train /= self._N_training_data
-            accuracy_test /= self._N_test_data
+            if accuracy_train >= self._threshold and good_parameters_counter < self._num_good_parameters:
+                parameters = [param for name, param in self._model.named_parameters()]
+                good_parameters_counter += 1
+            if self._test_set is not None:
+                loss_test = running_loss_test / self._nbr_minibatch_test
+                accuracy_test /= self._N_test_data
             if epoch % step_to_print == 0:
                 print(f'-- epoch {epoch} --')
-                print(f'    loss (train, test): {loss_train}, {loss_test}')
-                print(f'    accuracy (train, test): {accuracy_train}, {accuracy_test}')
-            self._df.loc[epoch] = [epoch, loss_train, loss_test, accuracy_train, accuracy_test]
+                if self._test_set is not None:
+                    print(f'    loss (train, test): {loss_train:.4f}, {loss_test:.4f}')
+                    print(f'    accuracy (train, test): {accuracy_train:.4f}, {accuracy_test:.4f}')
+                else:
+                    print(f'    loss: {loss_train:.4f}')
+                    print(f'    accuracy: {accuracy_train:.4f}')
+            if self._test_set is not None:
+                self._df.loc[epoch] = [epoch, loss_train, loss_test, accuracy_train, accuracy_test, parameters]
+            else:
+                self._df.loc[epoch] = [epoch, loss_train, accuracy_train, parameters]
+
         t1 = time.time()
-        print(f'{num_epoch} trainings is finished! Spent time {t1-t0} seconds.')
-        print(f'Final loss (train, test): {loss_train}, {loss_test}')
-        print(f'Final accuracy (train, test): {accuracy_train}, {accuracy_test}')
+        print(f'{self._num_epoch} trainings is finished! Spent time {t1 - t0} seconds.')
+        if self._test_set is not None:
+            print(f'Final loss (train, test): {loss_train:.4f}, {loss_test:.4f}')
+            print(f'Final accuracy (train, test): {accuracy_train:.4f}, {accuracy_test:.4f}')
+        else:
+            print(f'Final training loss: {loss_train:.4f}')
+            print(f'Final training accuracy: {accuracy_train:.4f}')
 
     @property
     def result(self) -> pd.DataFrame:
         return self._df
 
-    def plot_loss_accuracy(self):
-        df = self._df
-        plt.figure(1)
-        plt.grid(True)
-        plt.clf()
-        # plt.plot(df['epoch'], df['accuracy_train'], marker='o', color='red')
-        plt.plot(df['epoch'], df['accuracy_train'], color='red')
-        plt.plot(df['epoch'], df['accuracy_test'], color='orange', linestyle='dashed')
-        # plt.plot(df['epoch'], df['loss_train'], marker='o', color='blue')
-        plt.plot(df['epoch'], df['loss_train'], color='blue')
-        plt.plot(df['epoch'], df['loss_test'], color='teal', linestyle='dashed')
 
-        plt.xlabel(r'epoch')
-        plt.ylabel(r'loss/accuracy')
+def plot_loss_accuracy(df: pd.DataFrame, marker='None', include_test=True):
+    r"""
+    :param df: DataFrame from the MyNNTrainer.result
+    :param marker: usually 'o', 'D', '^', 'v', '<', '>', 's', 'p', '*'.
+    documentation can be found at https://matplotlib.org/3.1.1/api/markers_api.html
+    :param include_test:
+    :return:
+    """
+    plt.figure(1)
+    plt.grid(True)
+    plt.clf()
+    plt.plot(df['epoch'], df['accuracy_train'], marker=marker, color='red')
+    if include_test is True:
+        plt.plot(df['epoch'], df['accuracy_test'], color='orange', marker=marker, linestyle='dashed')
+    plt.plot(df['epoch'], df['loss_train'], marker=marker, color='blue')
+    if include_test is True:
+        plt.plot(df['epoch'], df['loss_test'], color='teal', marker=marker, linestyle='dashed')
+    plt.xlabel(r'epoch')
+    plt.ylabel(r'loss/accuracy')
+    if include_test is True:
         plt.legend(['accuracy train', 'accuracy test', 'loss_train', 'loss_test'])
-        plt.show()
+    else:
+        plt.legend(['accuracy train', 'loss_train'])
+    plt.show()
+
+
+def print_good_parameters(df: pd.DataFrame, dataset: ModuleParams):
+    threshold = dataset.good_parameter_threshold
+    accurate_df = df.loc[df.parameters != 0]
+    if len(accurate_df) == 0:
+        print(f'There is no models accuracy larger than {threshold}')
+    else:
+        print(f'\n The parameters that perform with (at least) {threshold * 100}% accuracy are:')
+        for index, row in accurate_df.iterrows():
+            epoch, loss, accuracy, parameters = row['epoch'], row['loss_train'], row['accuracy_train'], row['parameters']
+            print(f'\nepoch {epoch}: (accuracy, loss): ({accuracy:.4f}, {loss:.4f})')
+            for name, params in parameters:
+                print(f'    {params}')
