@@ -37,9 +37,10 @@ class ModuleParams:
     linear_out_features: int = 2
     num_good_parameters: int = 5
     good_parameter_threshold: float = 0.95
+    loss_function: str = 'cross_entropy'
 
 
-class TwoLayerReluModel(nn.Module):
+class TwoLayerReluClassificationModel(nn.Module):
     r"""
     This class is a two-layer linear neural network with a ReLu activation function on the first layer.
     Basically, f(x) = b2 + w2 * σ(b1 + w1 * x)
@@ -48,7 +49,7 @@ class TwoLayerReluModel(nn.Module):
         self._in_feature = model_params.linear_in_features
         self._hidden_neurons = model_params.linear_hidden_features
         self._out_feature = model_params.linear_out_features
-        super(TwoLayerReluModel, self).__init__()
+        super(TwoLayerReluClassificationModel, self).__init__()
         self._model = nn.Sequential(nn.Linear(self._in_feature, self._hidden_neurons),
                                     nn.ReLU(),
                                     nn.Linear(self._hidden_neurons, self._out_feature))
@@ -98,6 +99,8 @@ class MyNNTrainer:
         self._training_set, self._test_set = training_set, test_set
         self._model = model(model_params=model_params)
         self._loss_function = nn.CrossEntropyLoss()
+        if model_params.loss_function == 'MSE':
+            self._loss_function = nn.MSELoss()
         self._learning_rate, self._num_epoch = model_params.learning_rate, model_params.num_epoch
         self._batchsize, self._optimizer = model_params.batch_size, model_params.optimizer
         self._momentum, self._print_num = model_params.momentum, model_params.print_number
@@ -114,9 +117,9 @@ class MyNNTrainer:
         self.train()
 
     def train(self):
-        if self._optimizer == 'Adam':
-            optimizer = torch.optim.Adam(self._model.parameters(), lr=self._learning_rate)
-        if self._optimizer == 'SDG':
+        # if self._optimizer == 'Adam':
+        optimizer = torch.optim.Adam(self._model.parameters(), lr=self._learning_rate)
+        if self._optimizer == 'SGD':
             optimizer = torch.optim.SGD(self._model.parameters(), lr=self._learning_rate, momentum=self._momentum)
         t0 = time.time()
         good_parameters_counter = 0
@@ -156,7 +159,7 @@ class MyNNTrainer:
             loss_train = running_loss_train / self._nbr_minibatch_train
             accuracy_train /= self._N_training_data
             if accuracy_train >= self._threshold and good_parameters_counter < self._num_good_parameters:
-                parameters = [param for name, param in self._model.named_parameters()]
+                parameters = [(name, param) for name, param in self._model.named_parameters()]
                 good_parameters_counter += 1
             if self._test_set is not None:
                 loss_test = running_loss_test / self._nbr_minibatch_test
@@ -187,6 +190,9 @@ class MyNNTrainer:
     def result(self) -> pd.DataFrame:
         return self._df
 
+    @property
+    def model(self):
+        return self._model
 
 def plot_loss_accuracy(df: pd.DataFrame, marker='None', include_test=True):
     r"""
@@ -223,6 +229,8 @@ def print_good_parameters(df: pd.DataFrame, dataset: ModuleParams):
         print(f'\n The parameters that perform with (at least) {threshold * 100}% accuracy are:')
         for index, row in accurate_df.iterrows():
             epoch, loss, accuracy, parameters = row['epoch'], row['loss_train'], row['accuracy_train'], row['parameters']
-            print(f'\nepoch {epoch}: (accuracy, loss): ({accuracy:.4f}, {loss:.4f})')
+            print(f'\n-- epoch {epoch}: (accuracy, loss): ({accuracy:.4f}, {loss:.4f})')
             for name, params in parameters:
+                print(f'    {name}')
                 print(f'    {params}')
+
