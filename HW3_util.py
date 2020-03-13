@@ -38,7 +38,7 @@ def letter_to_tensor(letter, all_letter: str):
 @dataclass
 class ModuleParamsVanillaRNN:
     all_letters_base: str = all_letters
-    in_out_size: int = len(all_letters_base)
+    # in_out_size: int = len(all_letters_base)
     hidden_size: int = 2
     learning_rate: float = 0.005
     n_steps: int = 1000
@@ -57,11 +57,11 @@ class VanillaRNN(nn.Module):
     """
     def __init__(self, module_params: ModuleParamsVanillaRNN):
         super(VanillaRNN, self).__init__()
-        self._in_out_size = module_params.in_out_size
+        self._in_out_size = len(module_params.all_letters_base)
         self._hidden_size = module_params.hidden_size
         self._A = nn.Linear(self._in_out_size, self._hidden_size)
         self._R = nn.Linear(self._hidden_size, self._hidden_size)
-        self._B = nn.Linear(self._hidden_size, self._output_size)
+        self._B = nn.Linear(self._hidden_size, self._in_out_size)
         self._tanh = nn.Tanh()
 
     def forward(self, x, h):
@@ -99,7 +99,7 @@ class VanillaRNNTrainer:
             start_index = random.randint(0, len(self._training_text) - self._chunk_size)
             end_index = start_index + self._chunk_size + 1
             chunk = self._training_text[start_index:end_index]
-            if self._is_print_training and step%self._printing_step == 0:
+            if self._is_print_training and step % self._printing_step == 0:
                 print(f'  input = {chunk}')
                 chunk_predicted = chunk[0]
             for p in range(self._chunk_size - 1):
