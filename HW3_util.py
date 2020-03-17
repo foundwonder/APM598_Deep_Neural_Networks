@@ -59,9 +59,9 @@ class VanillaRNN(nn.Module):
         super(VanillaRNN, self).__init__()
         self._in_out_size = len(module_params.all_letters_base)
         self._hidden_size = module_params.hidden_size
-        self._A = nn.Linear(self._in_out_size, self._hidden_size)
-        self._R = nn.Linear(self._hidden_size, self._hidden_size)
-        self._B = nn.Linear(self._hidden_size, self._in_out_size)
+        self._A = nn.Linear(self._in_out_size, self._hidden_size, bias=False)
+        self._R = nn.Linear(self._hidden_size, self._hidden_size, bias=False)
+        self._B = nn.Linear(self._hidden_size, self._in_out_size, bias=False)
         self._tanh = nn.Tanh()
 
     def forward(self, x, h):
@@ -77,17 +77,19 @@ class VanillaRNN(nn.Module):
 
 
 class VanillaRNNTrainer:
-    def __init__(self, module_params: ModuleParamsVanillaRNN, module: nn.Module, training_text):
+    def __init__(self, module_params: ModuleParamsVanillaRNN, module: nn.Module, training_x, training_y):
         self._learning_rate = module_params.learning_rate
         self._chunk_size = module_params.chunk_size
         self._n_steps = module_params.n_steps
-        self._module = module(model_params=module_params)
+        self._module = module(module_params=module_params)
         self._optimizer_name = module_params.optimizer_name
         self._loss_function = nn.CrossEntropyLoss()
         self._df = pd.DataFrame(columns=('step', 'loss'))
-        self._training_text = training_text
+        self._training_x = training_x
+        self._training_y = training_y
         self._is_print_training = module_params.is_print_training
         self._printing_step = module_params.printing_step
+        self._all_letters = module_params.all_letters_base
         self.train()
 
     def train(self):
@@ -96,20 +98,21 @@ class VanillaRNNTrainer:
             h = self._module.init_hidden()
             optimizer.zero_grad()
             loss = 0.0
-            start_index = random.randint(0, len(self._training_text) - self._chunk_size)
+            start_index = random.randint(0, len(self._training_x) - self._chunk_size)
             end_index = start_index + self._chunk_size + 1
-            chunk = self._training_text[start_index:end_index]
+            chunk_x = self._training_x[start_index:end_index]
+            chunk_y = self._training_y[start_index:end_index]
             if self._is_print_training and step % self._printing_step == 0:
-                print(f'  input = {chunk}')
-                chunk_predicted = chunk[0]
-            for p in range(self._chunk_size - 1):
-                x = letter_to_tensor(chunk[p], all_letters)
-                letter_x_next = letter_to_tensor(chunk[p+1], all_letters)
+                print(f'  input = {chunk_x}')
+                chunk_predicted = '' # chunk_y[0]
+            for p in range(self._chunk_size):
+                x = letter_to_tensor(chunk_x[p], self._all_letters)
+                letter_x_next = letter_to_index(chunk_y[p], self._all_letters)
                 target = torch.tensor([letter_x_next], dtype=torch.long)
                 y, h = self._module(x, h)
                 loss += self._loss_function(y.view(1, -1), target)
                 if self._is_print_training:
-                    chunk_predicted += all_letters[y.argmax()]
+                    chunk_predicted += self._all_letters[y.argmax()]
             loss.backward()
             optimizer.step()
             ave_loss = loss.detach().numpy() / self._chunk_size
