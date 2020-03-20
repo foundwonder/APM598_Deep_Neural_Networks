@@ -150,7 +150,7 @@ def compute_y_difference(num_times: int, x_1, x_n, h_0, perturbating_func,
     for perturbation_value in perturbation_values:
         perturbation_log = log(perturbation_value)
         y = forward_certain_times(num_times, x_1, x_n, h_0, module, module_params)
-        x_1_perturbated = perturbating_func(perturbation_value)
+        x_1_perturbated = perturbating_func(x_1, perturbation_value)
         y_perturbated = forward_certain_times(num_times, x_1_perturbated, x_n, h_0, module, module_params)
         difference_y = (y-y_perturbated).detach().numpy()
         difference_y_norm = norm(np.asarray(difference_y))
