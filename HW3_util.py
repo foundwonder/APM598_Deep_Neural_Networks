@@ -77,6 +77,18 @@ class VanillaRNN(nn.Module):
     def init_hidden(self):
         return torch.zeros(1, self._hidden_size)
 
+    @property
+    def A(self):
+        return self._A.weight.data
+
+    @property
+    def B(self):
+        return self._B.weight.data
+
+    @property
+    def R(self):
+        return self._R.weight.data
+
 
 class VanillaRNNTrainer:
     def __init__(self, module_params: ModuleParamsVanillaRNN, module: nn.Module, training_x, training_y):
@@ -137,29 +149,42 @@ class VanillaRNNTrainer:
 def forward_certain_times(num_times: int, x_1, x_n, h_0, module, module_params):
     initial_module = module(module_params)
     y, h = initial_module(x_1, h_0)
+    a_tensor = initial_module.A
+    r_tensor = initial_module.R
+    b_tensor = initial_module.B
+    a_norm = torch.norm(a_tensor, p=2)
+    b_norm = torch.norm(b_tensor, p=2)
+    r_norm = torch.norm(r_tensor, p=2)
+    tanh_func = nn.Tanh()
+    tanh_h = tanh_func(r_tensor@h_0 + a_tensor@x_1)
+    middle_norm = torch.norm(input=1.0 - torch.mul(tanh_h, tanh_h), p=float('inf'))
     for i in range(num_times):
+        tanh_h = tanh_func(r_tensor@h + a_tensor@x_n)
+        middle_norm *= torch.norm(input=(1.0 - torch.mul(tanh_h, tanh_h))*r_norm, p=float('inf'))
         y, h = initial_module(x_n, h)
-    return y
+    eq_2 = b_norm*middle_norm*a_norm
+    return y, eq_2
 
 
 def compute_y_difference(num_times: int, x_1, x_n, h_0, perturbating_func,
                          perturbation_values, module, module_params, precision=4):
     torch.set_printoptions(precision=precision)  # because sometimes the difference is too small
     df = pd.DataFrame(columns=['perturbation', 'perturbation_log',
-                               'y_difference', 'y_difference_log'])
+                               'y_difference', 'y_difference_log', 'eq_2'])
     for perturbation_value in perturbation_values:
         perturbation_log = log(perturbation_value)
-        y = forward_certain_times(num_times, x_1, x_n, h_0, module, module_params)
+        y, eq_2 = forward_certain_times(num_times, x_1, x_n, h_0, module, module_params)
         x_1_perturbated = perturbating_func(x_1, perturbation_value)
-        y_perturbated = forward_certain_times(num_times, x_1_perturbated, x_n, h_0, module, module_params)
+        y_perturbated, eq_2_perturbated = forward_certain_times(num_times, x_1_perturbated, x_n, h_0, module, module_params)
         difference_y = (y-y_perturbated).detach().numpy()
         difference_y_norm = norm(np.asarray(difference_y))
+        eq_2 = float(eq_2)
         try:
             difference_y_log = log(difference_y_norm)
         except ValueError:
             difference_y_log = '-∞'
         df.loc[perturbation_value] = [perturbation_value, perturbation_log,
-                                      difference_y_norm, difference_y_log]
+                                      difference_y_norm, difference_y_log, eq_2]
     return df
 
 
